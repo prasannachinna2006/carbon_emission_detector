@@ -57,6 +57,19 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+      },
+      backgroundImage: {
+        "gradient-ocean": "var(--gradient-ocean)",
+        "gradient-wave": "var(--gradient-wave)", 
+        "gradient-deep": "var(--gradient-deep)",
+      },
+      boxShadow: {
+        "ocean": "var(--shadow-ocean)",
+        "wave": "var(--shadow-wave)",
       },
       borderRadius: {
         lg: "var(--radius)",
