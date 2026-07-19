@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,23 @@ const ReportForm = () => {
   const [ecosystemType, setEcosystemType] = useState("");
   const [area, setArea] = useState("");
   const [carbonCalc, setCarbonCalc] = useState(0);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    if (selected.length === 0) return;
+    setFiles((prev) => [...prev, ...selected]);
+    toast({
+      title: `${selected.length} file(s) added`,
+      description: "Photos are queued locally and will sync once submitted.",
+    });
+    e.target.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const calculateCarbon = () => {
     if (!area || !ecosystemType) return;
@@ -133,13 +150,70 @@ const ReportForm = () => {
                 <CardDescription>Upload geotagged photos for verification</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="border-2 border-dashed border-muted rounded-lg p-6 text-center">
+                <div
+                  className="border-2 border-dashed border-muted rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const dropped = Array.from(e.dataTransfer.files).filter((f) =>
+                      f.type.startsWith("image/")
+                    );
+                    if (dropped.length) {
+                      setFiles((prev) => [...prev, ...dropped]);
+                      toast({
+                        title: `${dropped.length} file(s) added`,
+                        description: "Photos are queued locally.",
+                      });
+                    }
+                  }}
+                >
                   <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground mb-2">
                     Drag & drop photos or click to browse
                   </p>
-                  <Button variant="outline" size="sm">Select Files</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    Select Files
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFilesSelected}
+                  />
                 </div>
+
+                {files.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {files.map((file, i) => (
+                      <div key={i} className="relative group">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="w-full h-20 object-cover rounded border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeFile(i)}
+                          className="absolute top-1 right-1 bg-black/60 text-white text-xs rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <Label htmlFor="description">Site Description</Label>
