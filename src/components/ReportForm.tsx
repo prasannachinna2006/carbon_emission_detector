@@ -6,58 +6,200 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Camera, Calculator, Upload } from "lucide-react";
+import { MapPin, Camera, Calculator, Upload, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { calculateCarbonMetrics, EcosystemType, ECOSYSTEM_PARAMS } from "@/lib/calculations";
+import { verifyEcosystemImage, VerificationResult } from "@/lib/imageVerifier";
 
-const ReportForm = () => {
+interface ReportFormProps {
+  onSubmitReport: (report: {
+    latitude: number;
+    longitude: number;
+    ecosystemType: EcosystemType;
+    area: number;
+    description: string;
+    files: File[];
+  }) => Promise<void> | void;
+}
+
+const ReportForm = ({ onSubmitReport }: ReportFormProps) => {
   const { toast } = useToast();
-  const [ecosystemType, setEcosystemType] = useState("");
-  const [area, setArea] = useState("");
-  const [carbonCalc, setCarbonCalc] = useState(0);
+  const [ecosystemType, setEcosystemType] = useState<string>("");
+  const [area, setArea] = useState<string>("");
+  const [latitude, setLatitude] = useState<string>("");
+  const [longitude, setLongitude] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
   const [files, setFiles] = useState<File[]>([]);
+  
+  // AI Image verification states
+  const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verifying' | 'verified' | 'failed'>('idle');
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Derive metrics instantly from inputs
+  const areaValue = parseFloat(area) || 0;
+  
+  // Only calculate carbon if verification passes successfully
+  const showCalculation = ecosystemType && areaValue > 0 && verificationStatus === 'verified';
+  
+  const metrics = showCalculation
+    ? calculateCarbonMetrics(ecosystemType as EcosystemType, areaValue)
+    : { estimatedCo2eTons: 0, potentialCredits: 0, estimatedValueUsd: 0 };
+
+  const handleVerification = async (selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) return;
+    
+    setVerificationStatus('verifying');
+    setVerificationResult(null);
+    
+    try {
+      // Analyze the first uploaded file
+      const result = await verifyEcosystemImage(selectedFiles[0]);
+      setVerificationResult(result);
+      
+      if (result.isValid) {
+        setVerificationStatus('verified');
+        toast({
+          title: "AI Verification Passed!",
+          description: result.reason,
+        });
+      } else {
+        setVerificationStatus('failed');
+        toast({
+          title: "AI Verification Failed",
+          description: result.reason,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      setVerificationStatus('failed');
+      setVerificationResult({
+        isValid: false,
+        detectedSubject: "Error",
+        confidence: 0,
+        reason: err.message || "Failed to process image.",
+      });
+    }
+  };
 
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
     if (selected.length === 0) return;
-    setFiles((prev) => [...prev, ...selected]);
-    toast({
-      title: `${selected.length} file(s) added`,
-      description: "Photos are queued locally and will sync once submitted.",
-    });
+    
+    const newFiles = [...files, ...selected];
+    setFiles(newFiles);
     e.target.value = "";
+    
+    handleVerification(newFiles);
   };
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    const newFiles = files.filter((_, i) => i !== index);
+    setFiles(newFiles);
+    
+    if (newFiles.length === 0) {
+      setVerificationStatus('idle');
+      setVerificationResult(null);
+    } else if (index === 0) {
+      // Re-verify the new primary image
+      handleVerification(newFiles);
+    }
   };
 
-  const calculateCarbon = () => {
-    if (!area || !ecosystemType) return;
-    
-    const areaValue = parseFloat(area);
-    const carbonFractions = {
-      mangrove: 0.47,
-      seagrass: 0.43,
-      saltmarsh: 0.45
-    };
-    
-    // Simplified calculation: Area × Biomass density × Carbon fraction × CO2 conversion
-    const avgBiomass = 150; // tons/hectare (simplified)
-    const co2Conversion = 3.67;
-    const carbonFraction = carbonFractions[ecosystemType as keyof typeof carbonFractions] || 0.45;
-    
-    const sequestration = areaValue * avgBiomass * carbonFraction * co2Conversion;
-    setCarbonCalc(Math.round(sequestration * 100) / 100);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Report Submitted Successfully!",
-      description: "Your blue carbon monitoring report is being processed for verification.",
-    });
+
+    if (!latitude || !longitude) {
+      toast({
+        title: "Missing Location Data",
+        description: "Please enter both latitude and longitude coordinates.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!ecosystemType) {
+      toast({
+        title: "Missing Ecosystem Type",
+        description: "Please select an ecosystem type.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!area || areaValue <= 0) {
+      toast({
+        title: "Invalid Area",
+        description: "Please enter a valid positive area in hectares.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (files.length === 0) {
+      toast({
+        title: "Photo Verification Required",
+        description: "Please upload an ecosystem photo for AI verification.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (verificationStatus === 'verifying') {
+      toast({
+        title: "Verification in Progress",
+        description: "Please wait for the AI to finish analyzing the uploaded photo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (verificationStatus === 'failed') {
+      toast({
+        title: "Verification Failed",
+        description: verificationResult?.reason || "Please upload a valid tree or coastal vegetation photo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await onSubmitReport({
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        ecosystemType: ecosystemType as EcosystemType,
+        area: areaValue,
+        description,
+        files,
+      });
+
+      toast({
+        title: "Report Submitted Successfully!",
+        description: "Your blue carbon monitoring report is being processed for verification.",
+      });
+
+      // Clear the form fields after successful submission
+      setLatitude("");
+      setLongitude("");
+      setEcosystemType("");
+      setArea("");
+      setDescription("");
+      setFiles([]);
+      setVerificationStatus('idle');
+      setVerificationResult(null);
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err.message || "An error occurred during submission.",
+        variant: "destructive",
+      });
+    }
   };
+
+  const activeParams = ecosystemType ? ECOSYSTEM_PARAMS[ecosystemType as EcosystemType] : null;
+  const carbonFractionText = activeParams ? activeParams.carbonFraction.toString() : "0.43 - 0.47";
+  const biomassDensityText = activeParams ? `${activeParams.biomassDensity} t/ha` : "25 - 150 t/ha";
 
   return (
     <section className="py-16">
@@ -85,6 +227,8 @@ const ReportForm = () => {
                       id="latitude" 
                       placeholder="e.g., 12.9716"
                       className="font-mono"
+                      value={latitude}
+                      onChange={(e) => setLatitude(e.target.value)}
                     />
                   </div>
                   <div>
@@ -93,23 +237,22 @@ const ReportForm = () => {
                       id="longitude" 
                       placeholder="e.g., 77.5946"
                       className="font-mono"
+                      value={longitude}
+                      onChange={(e) => setLongitude(e.target.value)}
                     />
                   </div>
                 </div>
                 
                 <div>
                   <Label htmlFor="ecosystem">Ecosystem Type</Label>
-                  <Select value={ecosystemType} onValueChange={(value) => {
-                    setEcosystemType(value);
-                    setTimeout(calculateCarbon, 100);
-                  }}>
+                  <Select value={ecosystemType} onValueChange={setEcosystemType}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select ecosystem type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="mangrove">Mangrove Forest</SelectItem>
                       <SelectItem value="seagrass">Seagrass Meadow</SelectItem>
-                      <SelectItem value="saltmarsh">Salt Marsh</SelectItem>
+                      <SelectItem value="salt_marsh">Salt Marsh</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -122,10 +265,7 @@ const ReportForm = () => {
                     step="0.1"
                     placeholder="e.g., 1.5"
                     value={area}
-                    onChange={(e) => {
-                      setArea(e.target.value);
-                      setTimeout(calculateCarbon, 100);
-                    }}
+                    onChange={(e) => setArea(e.target.value)}
                   />
                 </div>
                 
@@ -160,11 +300,9 @@ const ReportForm = () => {
                       f.type.startsWith("image/")
                     );
                     if (dropped.length) {
-                      setFiles((prev) => [...prev, ...dropped]);
-                      toast({
-                        title: `${dropped.length} file(s) added`,
-                        description: "Photos are queued locally.",
-                      });
+                      const newFiles = [...files, ...dropped];
+                      setFiles(newFiles);
+                      handleVerification(newFiles);
                     }
                   }}
                 >
@@ -197,7 +335,7 @@ const ReportForm = () => {
                 {files.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
                     {files.map((file, i) => (
-                      <div key={i} className="relative group">
+                      <div key={i} className="relative group animate-fade-in">
                         <img
                           src={URL.createObjectURL(file)}
                           alt={file.name}
@@ -221,16 +359,33 @@ const ReportForm = () => {
                     id="description"
                     placeholder="Describe the ecosystem condition, vegetation density, any notable features..."
                     rows={4}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
                 
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-sm text-blue-700 mb-1">
-                    <Camera className="h-4 w-4" />
-                    AI Verification Status
+                <div className={`p-4 border rounded-lg transition-all duration-300 ${
+                  verificationStatus === 'verifying' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                  verificationStatus === 'verified' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                  verificationStatus === 'failed' ? 'bg-rose-50 border-rose-200 text-rose-800' :
+                  'bg-blue-50 border-blue-200 text-blue-800'
+                }`}>
+                  <div className="flex items-center gap-2 text-sm font-semibold mb-1">
+                    {verificationStatus === 'verifying' ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                    ) : (
+                      <Camera className="h-4 w-4" />
+                    )}
+                    {verificationStatus === 'verifying' && 'AI Verification: Running Classification...'}
+                    {verificationStatus === 'verified' && `AI Verification Passed (${verificationResult?.confidence}% confidence)`}
+                    {verificationStatus === 'failed' && `AI Verification Failed (${verificationResult?.confidence}% confidence)`}
+                    {verificationStatus === 'idle' && 'AI Verification Status'}
                   </div>
-                  <p className="text-xs text-blue-600">
-                    Photos will be automatically verified for authenticity and GPS matching
+                  <p className="text-xs opacity-90 leading-relaxed">
+                    {verificationStatus === 'verifying' && 'Initiating TensorFlow.js classification. Checking structure for coastal vegetation/nature elements...'}
+                    {verificationStatus === 'verified' && (verificationResult?.reason || 'Valid blue carbon ecosystem photo detected.')}
+                    {verificationStatus === 'failed' && (verificationResult?.reason || 'Invalid photo. Nature structure check failed.')}
+                    {verificationStatus === 'idle' && 'Upload a photo of the ecosystem. The AI model will verify its subject before calculating carbon.'}
                   </p>
                 </div>
               </CardContent>
@@ -246,33 +401,56 @@ const ReportForm = () => {
               <CardDescription>Estimated CO₂ sequestration based on your data</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="bg-gradient-wave text-white p-6 rounded-lg">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-2xl font-bold">{carbonCalc}</div>
-                    <div className="text-sm text-white/80">tons CO₂/year</div>
+              {verificationStatus === 'verified' ? (
+                <div className="bg-gradient-wave text-white p-6 rounded-lg transition-all duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold">{metrics.estimatedCo2eTons}</div>
+                      <div className="text-sm text-white/80">tons CO₂/year</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{metrics.potentialCredits}</div>
+                      <div className="text-sm text-white/80">Potential Credits</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">${metrics.estimatedValueUsd}</div>
+                      <div className="text-sm text-white/80">Estimated Value</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold">{Math.round(carbonCalc * 0.8)}</div>
-                    <div className="text-sm text-white/80">Potential Credits</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">${Math.round(carbonCalc * 15)}</div>
-                    <div className="text-sm text-white/80">Estimated Value</div>
+                  
+                  <div className="mt-4 pt-4 border-t border-white/20">
+                    <p className="text-xs text-white/80">
+                      Calculation: Area × Biomass Density ({biomassDensityText}) × Carbon Fraction ({carbonFractionText}) × CO₂ Conversion (3.67)
+                    </p>
                   </div>
                 </div>
-                
-                <div className="mt-4 pt-4 border-t border-white/20">
-                  <p className="text-xs text-white/80">
-                    Calculation: Area × Biomass Density × Carbon Fraction ({ecosystemType === 'mangrove' ? '0.47' : ecosystemType === 'seagrass' ? '0.43' : '0.45'}) × CO₂ Conversion (3.67)
+              ) : verificationStatus === 'failed' ? (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-8 rounded-lg text-center">
+                  <Calculator className="h-10 w-10 mx-auto mb-3 text-rose-500 opacity-80" />
+                  <p className="font-bold text-sm mb-1">Calculation Locked (Verification Failed)</p>
+                  <p className="text-xs opacity-90">
+                    {verificationResult?.reason || 'The uploaded image is not a valid coastal ecosystem. Please upload a real tree/vegetation photo.'}
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-muted text-muted-foreground p-8 rounded-lg text-center border-2 border-dashed border-muted-foreground/20">
+                  <Calculator className="h-10 w-10 mx-auto mb-3 opacity-40 text-primary" />
+                  <p className="font-semibold text-sm mb-1">Calculation Locked (Awaiting AI Verification)</p>
+                  <p className="text-xs opacity-80">
+                    Please upload a valid ecosystem photo (trees, forest, or plants) to unlock and display the carbon sequestration calculation.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
           
           <div className="flex gap-4 justify-center">
-            <Button type="submit" variant="hero" size="lg">
+            <Button 
+              type="submit" 
+              variant="hero" 
+              size="lg" 
+              disabled={verificationStatus !== 'verified'}
+            >
               Submit for Verification
             </Button>
             <Button type="button" variant="outline" size="lg">
