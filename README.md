@@ -1,73 +1,34 @@
-# Welcome to your Lovable project
+# Carbon Emission Detector & Blue Carbon MRV
 
-## Project info
+An ocean-inspired monitoring, reporting, and verification (MRV) platform for blue carbon ecosystems (mangroves, seagrass, and salt marshes) featuring client-side AI image verification.
 
-**URL**: https://lovable.dev/projects/39f1dac5-b6c7-42b4-842c-35870a352e10
+## Technology Stack
 
-## How can I edit this code?
+- **Framework**: Vite + React + TypeScript
+- **Styling**: Tailwind CSS + Shadcn UI
+- **AI Verification**: TensorFlow.js + MobileNet (browser native)
+- **Database / Auth**: Supabase (PostgreSQL client integration)
 
-There are several ways of editing your application.
+## Core Features
 
-**Use Lovable**
+1. **Client-Side AI Verification**: Automatically classifies uploaded photos to verify that they depict real nature/coastal ecosystems. Calculation is locked if the photo is missing or fails verification (e.g. artificial objects, documents, screens).
+2. **Deterministic Carbon Sequestration Calculator**: Computes estimated CO₂ sequestration, potential credits (80% buffer), and market value ($15/ton) based on verified area and scientific biomass factors.
+3. **Dynamic Dashboard Metrics**: Renders totals and goals reactively in real-time, syncing to Supabase database (if authenticated) and caching to `localStorage` (local-first fallback).
+4. **Google Sign-in Bypass**: Includes a developer hover auto-login bypass on the Google button to easily sign in with any email without configuring backend OAuth credentials.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/39f1dac5-b6c7-42b4-842c-35870a352e10) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-**Use your preferred IDE**
+2. Run the local development server:
+   ```bash
+   npm run dev
+   ```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/39f1dac5-b6c7-42b4-842c-35870a352e10) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+3. Build production bundle:
+   ```bash
+   npm run build
+   ```
